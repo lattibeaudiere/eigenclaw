@@ -39,8 +39,8 @@ COPY agent/          ./agent/
 COPY label_txs.py    .
 
 # ── Skills (SKILL.md format — loaded by OpenClaw at startup) ─────────────────
-COPY agent/skills/tx-labeler/  /root/.openclaw/workspace/eigenclaw/skills/tx-labeler/
-COPY agent/skills/chainlink-price/ /root/.openclaw/workspace/eigenclaw/skills/chainlink-price/
+COPY agent/skills/ /root/.openclaw/workspace/eigenclaw/skills/
+
 
 # ── Entrypoint script ─────────────────────────────────────────────────────────
 COPY entrypoint.sh /entrypoint.sh
