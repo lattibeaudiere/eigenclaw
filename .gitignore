@@ -1,0 +1,23 @@
+# Environment & secrets — NEVER commit these
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Output data — may contain sensitive tx data
+output/
+*.jsonl
+*.csv
+
+# OS
+.DS_Store
+Thumbs.db

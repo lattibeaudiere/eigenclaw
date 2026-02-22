@@ -1,0 +1,55 @@
+{
+  "gateway": {
+    "mode": "lan",
+    "port": 18789,
+    "bind": "0.0.0.0"
+  },
+
+  "provider": {
+    "type": "custom",
+    "name": "Chutes TEE Inference",
+    "endpoint": "${CHUTES_ENDPOINT}",
+    "apiKey": "${CHUTES_API_KEY}",
+    "model": "${CHUTES_MODEL}",
+    "openaiCompatible": true
+  },
+
+  "agents": {
+    "defaults": {
+      "systemPrompt": "You are EigenClaw, a sovereign DeFi AI agent running inside a Trusted Execution Environment on EigenCloud. Your reasoning is powered by a private TEE-secured LLM (Chutes). You have skills to classify DeFi transactions and fetch live Chainlink price feeds. All your outputs are cryptographically attested. Be concise, precise, and never hallucinate token amounts or addresses.",
+
+      "memory": {
+        "enabled": true,
+        "backend": "local",
+        "maxMessages": 100
+      },
+
+      "sandbox": {
+        "mode": "off"
+      },
+
+      "tools": {
+        "allow": [
+          "exec",
+          "read",
+          "sessions_list",
+          "sessions_history",
+          "sessions_send"
+        ],
+        "deny": ["browser", "canvas", "discord", "write", "edit"]
+      }
+    },
+
+    "list": [
+      {
+        "id": "eigenclaw-main",
+        "name": "EigenClaw",
+        "description": "Sovereign DeFi agent — tx classification, Chainlink price feeds, verifiable execution",
+        "skills": [
+          "tx_labeler",
+          "chainlink_price"
+        ]
+      }
+    ]
+  }
+}

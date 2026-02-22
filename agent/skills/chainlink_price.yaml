@@ -1,0 +1,56 @@
+name: chainlink_price
+version: "1.0.0"
+description: >
+  Fetches verifiable asset prices from Chainlink Data Feeds (dAPI).
+  Uses public RPC calls — no API key required. Works on Arbitrum, Ethereum mainnet, and Sepolia.
+
+triggers:
+  - "what is the price of"
+  - "get ETH price"
+  - "fetch price feed"
+  - "chainlink price"
+  - "current price"
+
+tools:
+  - name: get_price
+    description: >
+      Fetch the latest price for an asset pair (e.g. ETH/USD, BTC/USD, USDC/USD)
+      from a Chainlink Aggregator contract via JSON-RPC.
+    type: exec
+    command: python3
+    args:
+      - /app/agent/skills/_chainlink_price_fetch.py
+      - "{{pair}}"
+      - "{{network}}"
+    response:
+      format: json
+      fields:
+        - pair
+        - price
+        - decimals
+        - updated_at
+        - round_id
+        - network
+
+examples:
+  - user: "What is the current ETH price?"
+    assistant: |
+      {
+        "pair": "ETH/USD",
+        "price": 3241.50,
+        "decimals": 8,
+        "updated_at": "2026-02-22T07:30:00Z",
+        "round_id": "110680464442257311",
+        "network": "arbitrum"
+      }
+
+  - user: "Get BTC/USD price on Ethereum mainnet"
+    assistant: |
+      {
+        "pair": "BTC/USD",
+        "price": 96450.00,
+        "decimals": 8,
+        "updated_at": "2026-02-22T07:29:55Z",
+        "round_id": "55340232221128654",
+        "network": "mainnet"
+      }

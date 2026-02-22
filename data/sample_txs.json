@@ -1,0 +1,22 @@
+[
+  {
+    "tx_hash": "0xaaa...001",
+    "description": "Calldata starts with redeemDelegations selector. Logs: Aave Mint 128.569 aArbUSDCn from 0x000...000 to beneficiary 0xabc..., USDC Transfer 127.929 USDC to aArbUSDCn contract."
+  },
+  {
+    "tx_hash": "0xbbb...002",
+    "description": "Calldata selector 0x83bd37f9 (Odos swap). Logs: WETH Transfer 0.5 to OdosRouter, USDC Transfer 1234.56 to msg.sender. No Aave events."
+  },
+  {
+    "tx_hash": "0xccc...003",
+    "description": "Calldata: borrow(address,uint256,uint256,uint16,address). Logs: Aave Borrow event asset=USDC amount=500 interestRateMode=2 (variable) onBehalfOf=msg.sender."
+  },
+  {
+    "tx_hash": "0xddd...004",
+    "description": "Calldata: repay(address,uint256,uint256,address). Logs: Aave Repay event asset=USDC amount=505.12 repayer=msg.sender onBehalfOf=msg.sender."
+  },
+  {
+    "tx_hash": "0xeee...005",
+    "description": "Calldata: withdraw(address,uint256,address). Logs: Aave Withdraw event asset=WETH amount=1.0, aWETH Transfer from user to 0x000...000."
+  }
+]

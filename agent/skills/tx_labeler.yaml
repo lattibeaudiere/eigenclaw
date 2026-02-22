@@ -1,0 +1,70 @@
+name: tx_labeler
+version: "1.0.0"
+description: >
+  Classifies DeFi transaction intent from calldata + event logs.
+  OpenClaw calls this skill when asked to analyze or label a transaction.
+  The skill runs a Python script directly (no sandbox — we're already in a TEE).
+
+triggers:
+  - "label this tx"
+  - "classify transaction"
+  - "what did this tx do"
+  - "analyze calldata"
+  - "identify protocol action"
+  - "what protocol"
+  - "what was swapped"
+  - "aave"
+  - "odos"
+  - "borrow"
+  - "supply"
+  - "delegated"
+
+tools:
+  - name: classify_tx
+    description: >
+      Classify a single DeFi transaction. Provide calldata selector and/or
+      event log summary. Returns structured JSON with action type, protocol,
+      tokens, amounts, confidence, and reasoning.
+    type: exec
+    command: python3
+    args:
+      - /app/agent/skills/_tx_classify.py
+      - "{{input}}"
+    response:
+      format: json
+      fields:
+        - action_type
+        - protocol
+        - token_in
+        - amount_in
+        - token_out
+        - amount_out
+        - confidence
+        - reason
+
+examples:
+  - user: "Classify this: calldata redeemDelegations, Aave Mint 128 aArbUSDCn from null address, USDC transfer 127.9"
+    assistant: |
+      {
+        "action_type": "DELEGATED_SUPPLY",
+        "protocol": "Aave V3",
+        "token_in": "USDC",
+        "amount_in": 127.9,
+        "token_out": "aArbUSDCn",
+        "amount_out": 128.0,
+        "confidence": 0.97,
+        "reason": "redeemDelegations selector + Aave Mint from null address confirms delegated supply."
+      }
+
+  - user: "What did this tx do? Odos swap selector, WETH in 0.5, USDC out 1234"
+    assistant: |
+      {
+        "action_type": "SWAP",
+        "protocol": "Odos",
+        "token_in": "WETH",
+        "amount_in": 0.5,
+        "token_out": "USDC",
+        "amount_out": 1234.0,
+        "confidence": 0.95,
+        "reason": "Odos swap selector with WETH input and USDC output transfer to msg.sender."
+      }
