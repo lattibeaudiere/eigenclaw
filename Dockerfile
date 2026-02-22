@@ -54,4 +54,4 @@ ENV NETWORK_PUBLIC=sepolia
 # OpenClaw gateway port
 EXPOSE 18789
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/entrypoint.sh"]

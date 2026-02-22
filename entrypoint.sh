@@ -123,4 +123,4 @@ log "Config applied. Primary model: $CHUTES_DEFAULT_MODEL_REF (TEE)"
 # ── 5. Start OpenClaw gateway ─────────────────────────────────────────────────
 # TEE requires 0.0.0.0 (not loopback) so EigenCompute can route traffic in
 log "Starting OpenClaw gateway on 0.0.0.0:$GATEWAY_PORT..."
-exec openclaw gateway run --bind 0.0.0.0 --port "$GATEWAY_PORT"
+exec openclaw gateway run --bind 0.0.0.0 --port "$GATEWAY_PORT" --verbose
