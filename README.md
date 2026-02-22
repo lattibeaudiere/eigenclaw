@@ -1,203 +1,93 @@
-# EigenClaw — Sovereign AI Agent
+# ryanlattibeaudiere-project
 
-A verifiable, privacy-preserving DeFi AI agent built on three TEE layers.
-**Nothing runs on your local machine except the `ecloud` CLI.**
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     EigenCompute TEE                            │
-│                   (Google Cloud Intel TDX)                      │
-│                                                                 │
-│  ┌──────────────────────┐   ┌──────────────────────────────┐   │
-│  │   OpenClaw Gateway   │──▶│   Chutes TEE Inference       │   │
-│  │   (Agent "body")     │   │   (Agent "brain")            │   │
-│  │                      │   │                              │   │
-│  │  Skills:             │   │  Llama 3.2 11B in TEE        │   │
-│  │  • tx_labeler        │   │  OpenAI-compatible API       │   │
-│  │  • chainlink_price   │   │  Cryptographic attestation   │   │
-│  └──────────────────────┘   └──────────────────────────────┘   │
-│                │                          ▲                     │
-│  ┌─────────────▼──────────────────────────┴──────────────────┐  │
-│  │              Python REST API  (server.py)                  │  │
-│  │   POST /label   POST /label/batch   GET /health /info      │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-         ▲ on-chain attestation proofs (verifiable by anyone)
-```
 
----
+## Getting started
 
-## What runs where
+To make it easy for you to get started with GitLab, here's a list of recommended next steps.
 
-| Component | Where it runs | Your machine does |
-|-----------|--------------|-------------------|
-| OpenClaw gateway | EigenCloud TEE | nothing |
-| Chutes LLM inference | Chutes TEE | nothing |
-| Docker image build + push | `ecloud` CLI → EigenCloud | one command |
-| `ecloud` CLI | Local (already installed) | `ecloud compute app deploy` |
+Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
 
----
+## Add your files
 
-## Project Layout
+* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
+* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
 
 ```
-EigenClaw/
-├── agent/
-│   ├── openclaw.json           # OpenClaw config — points LLM at Chutes
-│   └── skills/
-│       ├── tx_labeler.yaml         # Skill: DeFi tx classification
-│       ├── chainlink_price.yaml    # Skill: Chainlink dAPI price feeds
-│       └── _chainlink_price_fetch.py  # Python helper for price skill
-│
-├── chutes/
-│   ├── inference_chute.py      # Chute definition — deploy this to Chutes.ai
-│   └── client.py               # Inference client (Chutes primary, EigenAI fallback)
-│
-├── data/
-│   └── sample_txs.json         # Example tx inputs
-│
-├── label_txs.py                # Batch tx labeler CLI
-├── server.py                   # HTTP server (runs inside TEE container)
-├── test_eigenai.py             # Smoke-test EigenAI directly
-│
-├── Dockerfile                  # Multi-stage: OpenClaw + Python labeler
-├── requirements.txt
-├── .env.example                # Template — copy to .env, never commit .env
-└── .gitignore
+cd existing_repo
+git remote add origin https://gitlab.com/ryanlattibeaudiere-group/ryanlattibeaudiere-project.git
+git branch -M main
+git push -uf origin main
 ```
 
----
+## Integrate with your tools
 
-## Setup
+* [Set up project integrations](https://gitlab.com/ryanlattibeaudiere-group/ryanlattibeaudiere-project/-/settings/integrations)
 
-### Step 1 — Get your API keys
+## Collaborate with your team
 
-**Chutes** (primary brain — TEE LLM inference):
-1. Sign up at [chutes.ai](https://chutes.ai)
-2. Dashboard → API Keys → copy your key
-3. Deploy your inference Chute (GitHub Actions can do this too, or via Chutes UI)
+* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
+* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
+* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
+* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
+* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
 
-**EigenCloud** (execution environment + fallback inference):
-```powershell
-ecloud auth generate --store    # stores key locally
-ecloud auth whoami              # confirm address
-```
+## Test and Deploy
 
-**Sepolia ETH** (for testnet deployments — free):
-- [Google Cloud Faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)
-- [Alchemy Faucet](https://sepoliafaucet.com/)
+Use the built-in continuous integration in GitLab.
 
-### Step 4 — Subscribe to EigenCompute
+* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
+* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
+* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
+* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
+* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
 
-```powershell
-ecloud billing subscribe        # opens payment portal — $100 credit covers it
-```
+***
 
-### Step 5 — Start Docker Desktop, then deploy
+# Editing this README
 
-Docker Desktop needs to be running for the `ecloud` CLI to build the image.
-The CLI handles the entire build → push → deploy chain — nothing else runs locally.
+When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
 
-```powershell
-# Start Docker Desktop, then:
-ecloud compute app deploy
-# When prompted: choose "Build and deploy from Dockerfile"
-```
+## Suggestions for a good README
 
-The CLI will:
-1. Build the image (targets `linux/amd64` for the TEE)
-2. Push it to your Docker registry
-3. Deploy it into an EigenCompute TEE
-4. Return your live endpoint URL
+Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
 
-```powershell
-ecloud compute app info         # get your endpoint URL
-ecloud compute app logs         # stream logs from the TEE
-```
+## Name
+Choose a self-explaining name for your project.
 
-**Alternative — Verifiable Build from source (no local Docker at all):**
-If you want EigenCompute to build server-side with cryptographic build provenance:
-```powershell
-ecloud compute build submit --repo <your-git-repo-url> --commit <sha>
-ecloud compute app deploy --verifiable
-```
-This proves the exact source code → image mapping on-chain.
+## Description
+Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
 
----
+## Badges
+On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
 
-## Using the agent
+## Visuals
+Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
 
-Once deployed, your agent is reachable at the endpoint from `ecloud compute app info`.
+## Installation
+Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
 
-### Label a single transaction
-```bash
-curl -X POST https://<your-endpoint>/label \
-  -H "Content-Type: application/json" \
-  -d '{"description": "Calldata redeemDelegations, Aave Mint 128 aArbUSDCn"}'
-```
+## Usage
+Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-### Label a batch
-```bash
-curl -X POST https://<your-endpoint>/label/batch \
-  -H "Content-Type: application/json" \
-  -d '[{"description": "..."}, {"description": "..."}]'
-```
+## Support
+Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
 
-### Health check
-```bash
-curl https://<your-endpoint>/health
-# {"status": "ok"}
-```
+## Roadmap
+If you have ideas for releases in the future, it is a good idea to list them in the README.
 
-### Get backend info
-```bash
-curl https://<your-endpoint>/info
-# {"backend": "Chutes TEE (...)", "network": "sepolia"}
-```
+## Contributing
+State if you are open to contributions and what your requirements are for accepting them.
 
----
+For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
 
-## Updating the agent
+You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
 
-Make your code changes, then re-run deploy:
-```powershell
-ecloud compute app deploy       # rebuilds + redeploys
-# or to upgrade in-place:
-ecloud compute app upgrade
-```
+## Authors and acknowledgment
+Show your appreciation to those who have contributed to the project.
 
----
+## License
+For open source projects, say how it is licensed.
 
-## Useful commands
-
-```powershell
-ecloud compute app list                  # all your apps
-ecloud compute app status                # current app status
-ecloud compute app logs                  # stream live logs
-ecloud compute app terminate             # stop the app
-ecloud compute env set sepolia           # switch to testnet
-ecloud compute env set mainnet           # switch to mainnet
-```
-
----
-
-## Verify trust (on-chain attestation)
-
-```powershell
-ecloud compute app verify                # checks TEE attestation proofs
-```
-
-Anyone can verify the agent ran correctly without tampering — the cryptographic
-proof is registered on-chain by EigenCompute.
-
----
-
-## Docs & Support
-
-| Resource | URL |
-|---|---|
-| EigenCloud docs | [docs.eigencloud.xyz](https://docs.eigencloud.xyz/) |
-| EigenCompute quickstart | [docs.eigencloud.xyz/eigencompute/](https://docs.eigencloud.xyz/eigencompute/get-started/quickstart) |
-| Chutes docs | [docs.chutes.ai](https://docs.chutes.ai) |
-| OpenClaw docs | [docs.openclaw.ai](https://docs.openclaw.ai) |
-| EigenLayer Discord | Support channel for EigenCloud issues |
+## Project status
+If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
