@@ -20,6 +20,10 @@ GATEWAY_PORT=18789
 
 log() { echo "[eigenclaw] $*"; }
 
+# ── 0. Debug: TLS/networking env + permissions (non-sensitive) ───────────────
+log "Env check: DOMAIN=${DOMAIN:-<unset>} APP_PORT=${APP_PORT:-<unset>} ACME_STAGING=${ACME_STAGING:-<unset>}"
+log "User: $(whoami) uid=$(id -u) | Caddy: $(test -x /usr/local/bin/caddy && getcap /usr/local/bin/caddy 2>/dev/null || echo 'N/A')"
+
 # ── 1. Validate ───────────────────────────────────────────────────────────────
 if [ -z "${CHUTES_API_KEY:-}" ]; then
   log "ERROR: CHUTES_API_KEY is not set."
