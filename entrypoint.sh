@@ -11,7 +11,7 @@
 # Required env (injected by EigenCompute at deploy time):
 #   CHUTES_API_KEY   — from chutes.ai dashboard
 
-set -euo pipefail
+set -exuo pipefail
 
 CHUTES_BASE_URL="https://llm.chutes.ai/v1"
 CHUTES_DEFAULT_MODEL_REF="chutes/zai-org/GLM-4.7-TEE"   # TEE model — end-to-end verifiable
@@ -31,14 +31,14 @@ log "CHUTES_API_KEY present — starting setup..."
 # ── 2. Seed OpenClaw config if first boot ────────────────────────────────────
 if [ ! -f "$HOME/.openclaw/openclaw.json" ]; then
   log "First boot — seeding OpenClaw config..."
-  openclaw onboard --non-interactive --accept-risk --auth-choice skip >/dev/null 2>&1 || true
-  openclaw config set gateway.mode local >/dev/null 2>&1
+  openclaw onboard --non-interactive --accept-risk --auth-choice skip 2>&1 || true
+  openclaw config set gateway.mode local 2>&1
   log "Config seeded."
 fi
 
 # ── 3. Authenticate Chutes (non-interactive, via env var) ────────────────────
 log "Authenticating with Chutes..."
-echo "$CHUTES_API_KEY" | openclaw models auth paste-token --provider chutes >/dev/null 2>&1
+echo "$CHUTES_API_KEY" | openclaw models auth paste-token --provider chutes 2>&1
 log "Chutes auth applied."
 
 # ── 4. Fetch live model list + apply config atomically ───────────────────────
@@ -69,7 +69,7 @@ async function run() {
     process.exit(1);
   }
 }
-run();' 2>/dev/null || echo "")
+run();' 2>&1 || echo "")
 
 # Fallback to known models if API unreachable
 if [ -z "$MODELS_JSON" ]; then
@@ -92,7 +92,7 @@ const config = {
 };
 console.log(JSON.stringify(config));
 ")
-openclaw config set models.providers.chutes --json "$PROVIDER_CONFIG" >/dev/null 2>&1
+openclaw config set models.providers.chutes --json "$PROVIDER_CONFIG" 2>&1
 
 AGENT_DEFAULTS=$(node -e "
 const modelsJson = $MODELS_JSON;
@@ -115,8 +115,8 @@ const config = {
 };
 console.log(JSON.stringify(config));
 ")
-openclaw config set agents.defaults --json "$AGENT_DEFAULTS" >/dev/null 2>&1
-openclaw config set auth.profiles.\"chutes:manual\" --json '{"provider":"chutes","mode":"api_key"}' >/dev/null 2>&1
+openclaw config set agents.defaults --json "$AGENT_DEFAULTS" 2>&1
+openclaw config set auth.profiles.\"chutes:manual\" --json '{"provider":"chutes","mode":"api_key"}' 2>&1
 
 log "Config applied. Primary model: $CHUTES_DEFAULT_MODEL_REF (TEE)"
 
