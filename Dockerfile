@@ -38,8 +38,12 @@ COPY chutes/         ./chutes/
 COPY agent/          ./agent/
 COPY label_txs.py    .
 
-# ── Skills (SKILL.md format — loaded by OpenClaw at startup) ─────────────────
-COPY agent/skills/ /root/.openclaw/workspace/eigenclaw/skills/
+# ── OpenClaw templates (AGENTS.md etc — required by gateway) ─────────────────
+COPY docs/          /app/docs/
+
+# ── Workspace identity + skills ──────────────────────────────────────────────
+COPY agent/workspace/ /root/.openclaw/workspace/
+COPY agent/skills/    /root/.openclaw/workspace/eigenclaw/skills/
 
 
 # ── Entrypoint script ─────────────────────────────────────────────────────────
