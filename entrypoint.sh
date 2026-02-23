@@ -134,6 +134,13 @@ else
   log "WARNING: OPENCLAW_TOKEN not set — dashboard will reject connections."
 fi
 
-# ── 6. Start OpenClaw gateway ─────────────────────────────────────────────────
+# ── 6. Bypass device-pairing requirement (no exec into TEE) ──────────────────
+openclaw config set gateway.controlUi.allowInsecureAuth true 2>&1 || true
+openclaw config set gateway.controlUi.dangerouslyDisableDeviceAuth true 2>&1 || true
+openclaw config set gateway.auth.pairingRequired false 2>&1 || true
+openclaw config set gateway.trustedProxies '["127.0.0.1/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]' 2>&1 || true
+log "Pairing requirement bypassed; trusted proxies set."
+
+# ── 7. Start OpenClaw gateway ─────────────────────────────────────────────────
 log "Starting OpenClaw gateway on lan:$GATEWAY_PORT..."
 exec openclaw gateway run --bind lan --port "$GATEWAY_PORT"
