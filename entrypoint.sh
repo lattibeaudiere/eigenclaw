@@ -16,6 +16,7 @@ set -exuo pipefail
 CHUTES_BASE_URL="https://llm.chutes.ai/v1"
 CHUTES_DEFAULT_MODEL_REF="chutes/zai-org/GLM-4.7-TEE"   # TEE model — end-to-end verifiable
 CHUTES_FAST_MODEL_REF="chutes/zai-org/GLM-4.7-Flash"
+DEFEYES_BASE_URL="https://defeyes-api.vercel.app"
 GATEWAY_PORT=18789
 
 log() { echo "[eigenclaw] $*"; }
@@ -141,6 +142,14 @@ openclaw config set gateway.auth.pairingRequired false 2>&1 || true
 openclaw config set gateway.trustedProxies '["127.0.0.1/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]' 2>&1 || true
 log "Pairing requirement bypassed; trusted proxies set."
 
-# ── 7. Start OpenClaw gateway ─────────────────────────────────────────────────
+# ── 7. Export DeFEyes API for skills/tools ────────────────────────────────────
+export DEFEYES_BASE_URL
+if [ -n "${DEFEYES_API_KEY:-}" ]; then
+  log "DeFEyes API configured: $DEFEYES_BASE_URL (key: ${DEFEYES_API_KEY:0:8}...)"
+else
+  log "WARNING: DEFEYES_API_KEY not set — DeFi enrichment unavailable."
+fi
+
+# ── 8. Start OpenClaw gateway ─────────────────────────────────────────────────
 log "Starting OpenClaw gateway on lan:$GATEWAY_PORT..."
 exec openclaw gateway run --bind lan --port "$GATEWAY_PORT"
