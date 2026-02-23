@@ -124,7 +124,14 @@ openclaw config set auth.profiles.\"chutes:manual\" --json '{"provider":"chutes"
 
 log "Config applied. Primary model: $CHUTES_DEFAULT_MODEL_REF (TEE)"
 
-# ── 5. Start OpenClaw gateway ─────────────────────────────────────────────────
-# TEE requires 0.0.0.0 (not loopback) so EigenCompute can route traffic in
-log "Starting OpenClaw gateway on 0.0.0.0:$GATEWAY_PORT..."
+# ── 5. Set gateway token for dashboard auth ──────────────────────────────────
+if [ -n "${OPENCLAW_TOKEN:-}" ]; then
+  openclaw config set gateway.token "$OPENCLAW_TOKEN" 2>&1
+  log "Gateway token set from env."
+else
+  log "WARNING: OPENCLAW_TOKEN not set — dashboard will reject connections."
+fi
+
+# ── 6. Start OpenClaw gateway ─────────────────────────────────────────────────
+log "Starting OpenClaw gateway on lan:$GATEWAY_PORT..."
 exec openclaw gateway run --bind lan --port "$GATEWAY_PORT"
