@@ -128,7 +128,6 @@ log "Config applied. Primary model: $CHUTES_DEFAULT_MODEL_REF (TEE)"
 # ── 5. Set gateway token for dashboard auth ──────────────────────────────────
 if [ -n "${OPENCLAW_TOKEN:-}" ]; then
   export OPENCLAW_GATEWAY_TOKEN="$OPENCLAW_TOKEN"
-  openclaw config set gateway.token "$OPENCLAW_TOKEN" 2>&1 || true
   openclaw config set gateway.auth.token "$OPENCLAW_TOKEN" 2>&1 || true
   log "Gateway token set from env: ${OPENCLAW_TOKEN:0:6}..."
 else
@@ -150,6 +149,67 @@ else
   log "WARNING: DEFEYES_API_KEY not set — DeFi enrichment unavailable."
 fi
 
-# ── 8. Start OpenClaw gateway ─────────────────────────────────────────────────
+# ── 8. Continuous Memory + Automation Pulse ───────────────────────────────────
+WORKSPACE_DIR="$HOME/.openclaw/workspace"
+MEMORY_DIR="$WORKSPACE_DIR/memory"
+AUDIT_LOG_PATH="$WORKSPACE_DIR/AUDIT_LOG.md"
+
+mkdir -p "$MEMORY_DIR"
+touch "$AUDIT_LOG_PATH" || true
+
+# Consolidate historical memory into a single file for deterministic boot context.
+# This approximates “cat memory/*.md into the system prompt” by creating a rollup
+# file that the agent reads during Session Startup.
+rollup_memory() {
+  local rollup="$MEMORY_DIR/_ROLLUP.md"
+  : > "$rollup" || true
+
+  shopt -s nullglob
+  local files=("$MEMORY_DIR"/*.md)
+  shopt -u nullglob
+
+  for f in "${files[@]}"; do
+    if [ "$(basename "$f")" = "_ROLLUP.md" ]; then
+      continue
+    fi
+    {
+      echo ""
+      echo "---"
+      echo "# $(basename "$f")"
+      echo ""
+      cat "$f"
+      echo ""
+    } >> "$rollup" || true
+  done
+}
+
+start_audit_pulse() {
+  local enabled="${ENABLE_AUDIT_PULSE:-true}"
+  local interval="${AUDIT_PULSE_SECONDS:-14400}" # 4 hours
+
+  if [ "$enabled" != "true" ]; then
+    log "Audit pulse disabled (ENABLE_AUDIT_PULSE=$enabled)."
+    return 0
+  fi
+
+  if [ ! -f "/app/agent/scripts/headless_audit.py" ]; then
+    log "WARNING: headless audit script missing — pulse not started."
+    return 0
+  fi
+
+  log "Starting headless audit pulse (every ${interval}s)..."
+  (
+    while true; do
+      python3 /app/agent/scripts/headless_audit.py --once 2>&1 || true
+      rollup_memory 2>&1 || true
+      sleep "$interval" || true
+    done
+  ) >/tmp/defive-audit-pulse.log 2>&1 &
+}
+
+rollup_memory || true
+start_audit_pulse || true
+
+# ── 9. Start OpenClaw gateway ─────────────────────────────────────────────────
 log "Starting OpenClaw gateway on lan:$GATEWAY_PORT..."
 exec openclaw gateway run --bind lan --port "$GATEWAY_PORT"
