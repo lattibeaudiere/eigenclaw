@@ -126,8 +126,10 @@ log "Config applied. Primary model: $CHUTES_DEFAULT_MODEL_REF (TEE)"
 
 # ── 5. Set gateway token for dashboard auth ──────────────────────────────────
 if [ -n "${OPENCLAW_TOKEN:-}" ]; then
-  openclaw config set gateway.token "$OPENCLAW_TOKEN" 2>&1
-  log "Gateway token set from env."
+  export OPENCLAW_GATEWAY_TOKEN="$OPENCLAW_TOKEN"
+  openclaw config set gateway.token "$OPENCLAW_TOKEN" 2>&1 || true
+  openclaw config set gateway.auth.token "$OPENCLAW_TOKEN" 2>&1 || true
+  log "Gateway token set from env: ${OPENCLAW_TOKEN:0:6}..."
 else
   log "WARNING: OPENCLAW_TOKEN not set — dashboard will reject connections."
 fi
