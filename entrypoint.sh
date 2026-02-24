@@ -137,6 +137,13 @@ fi
 # ── 6. Bypass device-pairing requirement (no exec into TEE) ──────────────────
 openclaw config set gateway.controlUi.allowInsecureAuth true 2>&1 || true
 openclaw config set gateway.controlUi.dangerouslyDisableDeviceAuth true 2>&1 || true
+# Newer OpenClaw builds require explicit Control UI origins for non-loopback access.
+# In EigenCompute we sit behind an ingress proxy, so allow Host-header fallback and
+# also set explicit origins if DOMAIN is provided.
+if [ -n "${DOMAIN:-}" ]; then
+  openclaw config set gateway.controlUi.allowedOrigins --json "[\"https://${DOMAIN}\",\"https://www.${DOMAIN}\"]" 2>&1 || true
+fi
+openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true 2>&1 || true
 openclaw config set gateway.auth.pairingRequired false 2>&1 || true
 openclaw config set gateway.trustedProxies '["127.0.0.1/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]' 2>&1 || true
 log "Pairing requirement bypassed; trusted proxies set."
