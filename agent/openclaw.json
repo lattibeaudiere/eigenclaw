@@ -16,7 +16,7 @@
 
   "agents": {
     "defaults": {
-      "systemPrompt": "You are EigenClaw, a sovereign DeFi AI agent running inside a Trusted Execution Environment on EigenCloud. Your reasoning is powered by a private TEE-secured LLM (Chutes). You have skills to classify DeFi transactions and fetch live Chainlink price feeds. All your outputs are cryptographically attested. Be concise, precise, and never hallucinate token amounts or addresses.",
+      "systemPrompt": "You are EigenClaw, a sovereign DeFi AI agent running inside a Trusted Execution Environment on EigenCloud. Your reasoning is powered by a private TEE-secured LLM (Chutes). You have skills to classify DeFi transactions, fetch live Chainlink price feeds, and query Arbitrum JSON-RPC for on-chain ground truth (tx/receipts/logs). All your outputs are cryptographically attested. Be concise, precise, and never hallucinate token amounts or addresses.",
 
       "memory": {
         "enabled": true,
@@ -47,7 +47,8 @@
         "description": "Sovereign DeFi agent — tx classification, Chainlink price feeds, verifiable execution",
         "skills": [
           "tx_labeler",
-          "chainlink_price"
+          "chainlink_price",
+          "arbitrum_rpc"
         ]
       }
     ]

@@ -1,0 +1,45 @@
+name: arbitrum_rpc
+version: "1.0.0"
+description: >
+  Fetches Arbitrum on-chain ground truth via JSON-RPC: transaction, receipt,
+  and emitted logs. Also supports historical event scanning via eth_getLogs.
+  Uses ARBITRUM_RPC_URL (env) or defaults to https://arb1.arbitrum.io/rpc.
+
+triggers:
+  - "arbitrum rpc"
+  - "fetch receipt"
+  - "get transaction receipt"
+  - "get transaction by hash"
+  - "eth_getTransactionReceipt"
+  - "eth_getTransactionByHash"
+  - "eth_getLogs"
+  - "scan logs"
+  - "scan events"
+  - "get logs"
+
+tools:
+  - name: rpc_query
+    description: >
+      Query Arbitrum JSON-RPC. Input can be:
+      - a tx hash (0x...) to return a tx+receipt bundle, or
+      - a JSON object string for advanced actions:
+          {"action":"tx_bundle","tx_hash":"0x..."}
+          {"action":"get_logs","address":"0x...","topics":["0x..."],"from_block":123,"to_block":456}
+          {"action":"scan_logs","address":"0x...","topics":["0x..."],"from_block":123,"to_block":456}
+    type: exec
+    command: python3
+    args:
+      - /app/agent/skills/_arbitrum_rpc.py
+      - "{{input}}"
+    response:
+      format: json
+
+examples:
+  - user: "Fetch receipt for 0xabc123..."
+    assistant: |
+      { "tx_hash": "0xabc123...", "receipt": { "status": "0x1", "logs": [] } }
+
+  - user: "Scan Aave Pool Supply events between blocks 250000000 and 250010000"
+    assistant: |
+      {"action":"scan_logs","address":"0x794a61358D6845594F94dc1DB02A252b5b4814aD","topics":["0x...SupplyTopic0..."],"from_block":250000000,"to_block":250010000}
+

@@ -13,6 +13,14 @@ Persistent context across sessions. Update this file when learning important fac
 
 - **Chutes**: LLM inference (GLM-4.7-TEE primary, DeepSeek/Qwen fallbacks)
 - **DeFEyes**: Transaction enrichment and labeling (`DEFEYES_API_KEY`)
+- **Arbitrum JSON-RPC**: On-chain ground truth (`ARBITRUM_RPC_URL` or default `https://arb1.arbitrum.io/rpc`)
+
+## Arbitrum RPC (Ground Truth)
+
+- **Core calls**:
+  - `eth_getTransactionByHash` (who/where/value/calldata)
+  - `eth_getTransactionReceipt` (status + emitted `logs[]`)
+  - `eth_getLogs` (historical event scans by address/topics + block range)
 
 ## Protocol Registry (Arbitrum)
 
