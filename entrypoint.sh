@@ -207,14 +207,18 @@ start_audit_pulse() {
   log "Starting headless audit pulse (every ${interval}s)..."
   (
     while true; do
+      log "Audit pulse: running headless audit now..."
       python3 /app/agent/scripts/headless_audit.py --once 2>&1 || true
       rollup_memory 2>&1 || true
+      log "Audit pulse: sleeping for ${interval}s..."
       sleep "$interval" || true
     done
-  ) >/tmp/defive-audit-pulse.log 2>&1 &
+  ) &
 }
 
 rollup_memory || true
+# Run a single audit once at boot so we can confirm persistence quickly
+python3 /app/agent/scripts/headless_audit.py --once 2>&1 || true
 start_audit_pulse || true
 
 # ── 9. Start OpenClaw gateway ─────────────────────────────────────────────────

@@ -85,6 +85,8 @@ def run_once() -> int:
             audit_log,
             f"\n## {started} — Headless audit (FAILED)\n\n- **error**: `{type(e).__name__}: {e}`\n",
         )
+        # Emit a single-line status so we can verify in EigenCloud logs
+        print(f"AUDIT_STATUS ts={started} ok=false err={type(e).__name__}")
         return 1
 
     items: Any = (
@@ -199,6 +201,8 @@ def run_once() -> int:
             json.dumps(snapshot, indent=2), encoding="utf-8"
         )
 
+    # Emit a single-line status so we can verify in EigenCloud logs
+    print(f"AUDIT_STATUS ts={started} ok=true txs={len(tx_hashes)}")
     return 0
 
 
