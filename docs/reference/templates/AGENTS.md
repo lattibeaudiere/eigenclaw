@@ -192,17 +192,17 @@ Auth header: `X-API-Key: $DEFEYES_API_KEY`
 - `GET /api/usage` — confirm key works, check plan/usage
 - `GET /api/events?wallet=…&action_type=…&protocol=…` — query enriched events
 - `GET /api/explorer/events?limit=10` — public explorer feed (no key needed)
-- `GET /api/tx/<hash>` — single transaction detail
-- `POST /api/tx/<hash>/insight` — generate AI insight (Pro-only)
 - `GET /api/health` — API health check
 - `GET /openapi.json` — full API schema
+- `GET /api/x402/pricing` and `POST /api/x402/quote` — payment metadata when unauthenticated requests hit paid routes
+
+**Endpoint guardrail:** Never call `/api/enriched-events` (deprecated/invalid path). Use `/api/events`.
 
 ### Reconciliation Workflow
-1. Pull a tx from DeFEyes: `GET /api/explorer/events?limit=10` — pick a `ref_tx_hash`
-2. Pull DeFEyes record: `GET /api/tx/:hash`
-3. Pull on-chain receipt via RPC: `getTransactionReceipt(:hash)`
-4. Find the **canonical log** — scan receipt logs for a known emitter (Aave Pool, etc.)
-5. Extract the event name and parameters → this is the Primary Truth
-6. Compare against DeFEyes `action_type` and `outcome_asset`
-7. If match → `defeyes_label_matches: true`, no distortion
-8. If mismatch → emit MVE bundle with `distortion_found: true`, save proposal to `workspace/proposals/`
+1. Pull events from DeFEyes: `GET /api/events?limit=10` (or public `GET /api/explorer/events?limit=10`) — pick a `ref_tx_hash`
+2. Pull on-chain receipt via RPC: `getTransactionReceipt(:hash)`
+3. Find the **canonical log** — scan receipt logs for a known emitter (Aave Pool, etc.)
+4. Extract the event name and parameters → this is the Primary Truth
+5. Compare against DeFEyes `action_type` and `outcome_asset`
+6. If match → `defeyes_label_matches: true`, no distortion
+7. If mismatch → emit MVE bundle with `distortion_found: true`, save proposal to `workspace/proposals/`

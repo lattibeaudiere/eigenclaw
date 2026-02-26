@@ -76,18 +76,27 @@ def run_once() -> int:
     audit_log.touch(exist_ok=True)
 
     started = _now_iso()
-    explorer_url = f"{base_url}/api/explorer/events?limit={limit}"
+    # Current API surface: /api/events is canonical. Keep explorer feed as
+    # public fallback when no key or paid access is unavailable.
+    primary_url = f"{base_url}/api/events?limit={limit}"
+    fallback_url = f"{base_url}/api/explorer/events?limit={limit}"
+    sample_url = primary_url if api_key else fallback_url
 
     try:
-        explorer = _fetch_json(explorer_url, headers=headers, timeout_s=timeout_s)
+        explorer = _fetch_json(sample_url, headers=headers, timeout_s=timeout_s)
     except Exception as e:
-        _append_md(
-            audit_log,
-            f"\n## {started} — Headless audit (FAILED)\n\n- **error**: `{type(e).__name__}: {e}`\n",
-        )
-        # Emit a single-line status so we can verify in EigenCloud logs
-        print(f"AUDIT_STATUS ts={started} ok=false err={type(e).__name__}")
-        return 1
+        # Fallback to public explorer if primary feed is unavailable (e.g. 402)
+        try:
+            sample_url = fallback_url
+            explorer = _fetch_json(sample_url, headers={"Accept": "application/json"}, timeout_s=timeout_s)
+        except Exception:
+            _append_md(
+                audit_log,
+                f"\n## {started} — Headless audit (FAILED)\n\n- **error**: `{type(e).__name__}: {e}`\n",
+            )
+            # Emit a single-line status so we can verify in EigenCloud logs
+            print(f"AUDIT_STATUS ts={started} ok=false err={type(e).__name__}")
+            return 1
 
     items: Any = (
         explorer
@@ -101,30 +110,23 @@ def run_once() -> int:
     if not isinstance(items, list):
         items = []
 
-    tx_hashes = []
+    sampled: list[Dict[str, Any]] = []
     for it in items:
         if not isinstance(it, dict):
             continue
-        h = _extract_hash(it)
-        if h:
-            tx_hashes.append(h)
-        if len(tx_hashes) >= max_txs:
+        sampled.append(it)
+        if len(sampled) >= max_txs:
             break
 
     entry_lines = [
         f"\n## {started} — Headless audit\n",
         f"- **base**: `{base_url}`\n",
-        f"- **explorer**: `{explorer_url}`\n",
-        f"- **txs_sampled**: {len(tx_hashes)}\n",
+        f"- **sample_endpoint**: `{sample_url}`\n",
+        f"- **txs_sampled**: {len(sampled)}\n",
     ]
 
-    for h in tx_hashes:
-        tx_url = f"{base_url}/api/tx/{h}"
-        try:
-            tx = _fetch_json(tx_url, headers=headers, timeout_s=timeout_s)
-        except Exception as e:
-            entry_lines.append(f"\n### {h}\n- **fetch_failed**: `{type(e).__name__}: {e}`\n")
-            continue
+    for tx in sampled:
+        tx_hash = _extract_hash(tx) or "unknown_tx"
 
         action_type = None
         for k in ("action_type", "actionType", "type"):
@@ -134,14 +136,14 @@ def run_once() -> int:
                 break
 
         outcome_asset = None
-        for k in ("outcome_asset", "outcomeAsset", "reserve"):
+        for k in ("outcome_asset", "outcomeAsset", "reserve", "token_out_address", "tokenOutAddress"):
             v = tx.get(k) if isinstance(tx, dict) else None
             if isinstance(v, str) and v.startswith("0x"):
                 outcome_asset = v
                 break
 
         asset_symbol = None
-        for k in ("asset_symbol", "assetSymbol", "symbol"):
+        for k in ("asset_symbol", "assetSymbol", "symbol", "token_out_symbol", "tokenOutSymbol"):
             v = tx.get(k) if isinstance(tx, dict) else None
             if isinstance(v, str):
                 asset_symbol = v
@@ -159,7 +161,7 @@ def run_once() -> int:
         supply_borrow_mentioned = any(("Supply" in s or "Borrow" in s) for s in strings)
         multi_reserve_risk = rdu_count > 1 and (action_type or "").upper() not in ("SUPPLY", "BORROW")
 
-        entry_lines.append(f"\n### {h}\n")
+        entry_lines.append(f"\n### {tx_hash}\n")
         if action_type:
             entry_lines.append(f"- **action_type**: `{action_type}`\n")
         if asset_symbol:
@@ -180,7 +182,7 @@ def run_once() -> int:
             entry_lines.append(
                 "- **risk**: possible join-failure (early ReserveDataUpdated may have won). Verify Two-Anchor bundle.\n"
             )
-
+    
     text = "".join(entry_lines)
     _append_md(audit_log, text)
 
@@ -193,8 +195,8 @@ def run_once() -> int:
         snapshot = {
             "ts": started,
             "base_url": base_url,
-            "explorer_url": explorer_url,
-            "tx_hashes": tx_hashes,
+            "sample_url": sample_url,
+            "tx_hashes": [(_extract_hash(it) or "unknown_tx") for it in sampled],
         }
         (workspace / "audit_snapshots").mkdir(parents=True, exist_ok=True)
         (workspace / "audit_snapshots" / f"{day}-{started.replace(':', '')}.json").write_text(
@@ -202,7 +204,7 @@ def run_once() -> int:
         )
 
     # Emit a single-line status so we can verify in EigenCloud logs
-    print(f"AUDIT_STATUS ts={started} ok=true txs={len(tx_hashes)}")
+    print(f"AUDIT_STATUS ts={started} ok=true txs={len(sampled)}")
     return 0
 
 

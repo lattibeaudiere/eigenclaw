@@ -17,8 +17,8 @@ Examples of drift:
 
 When DeFEyes is wrong, the healing workflow is:
 
-1. **Start from DeFEyes** — pull a tx that exists in the DB (`GET /api/explorer/events`)
-2. **Pull the DeFEyes record** — `GET /api/tx/:hash`
+1. **Start from DeFEyes** — pull events that exist in the DB (`GET /api/events?limit=…` or public `GET /api/explorer/events?limit=…`)
+2. **Pick a tx hash** — use `ref_tx_hash` from that events response
 3. **Pull the on-chain receipt** — `getTransactionReceipt(:hash)` via Arbitrum RPC
 4. **Find the canonical log** — scan receipt logs for a known protocol emitter (Aave V3 Pool, etc.)
 5. **Apply the Hierarchy of Truth** — protocol event > entry asset > routing
