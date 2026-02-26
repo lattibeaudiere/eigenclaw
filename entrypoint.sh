@@ -253,8 +253,8 @@ start_gateway() {
 }
 
 gateway_ok() {
-  # Canvas mount is consistently present when gateway is up.
-  curl -fsS "http://127.0.0.1:${GATEWAY_PORT}/__openclaw__/canvas/" >/dev/null 2>&1
+  # Use unauthenticated root probe; canvas may require auth and cause false negatives.
+  curl -fsS "http://127.0.0.1:${GATEWAY_PORT}/" >/dev/null 2>&1
 }
 
 start_gateway
