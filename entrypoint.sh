@@ -235,9 +235,14 @@ openclaw config set update.checkOnStart false 2>&1 || true
 openclaw config set update.auto.enabled false 2>&1 || true
 
 gateway_pid=""
+gateway_started_at="0"
+GATEWAY_START_GRACE_SECONDS="${GATEWAY_START_GRACE_SECONDS:-45}"
+GATEWAY_RESTART_BACKOFF_SECONDS="${GATEWAY_RESTART_BACKOFF_SECONDS:-5}"
 start_gateway() {
   log "Starting OpenClaw gateway on lan:$GATEWAY_PORT..."
-  openclaw gateway run --bind lan --port "$GATEWAY_PORT" >/tmp/openclaw-gateway.out 2>&1 &
+  gateway_started_at="$(date +%s)"
+  # Let gateway logs flow to platform logs for visibility.
+  openclaw gateway run --bind lan --port "$GATEWAY_PORT" 2>&1 &
   gateway_pid="$!"
   log "Gateway process started pid=$gateway_pid"
 }
@@ -250,6 +255,15 @@ gateway_ok() {
 start_gateway
 
 while true; do
+  now="$(date +%s)"
+  age="$(( now - gateway_started_at ))"
+
+  # Give the gateway time to boot before health enforcement.
+  if [ "$age" -lt "$GATEWAY_START_GRACE_SECONDS" ]; then
+    sleep 2
+    continue
+  fi
+
   if gateway_ok; then
     sleep 10
     continue
@@ -262,5 +276,5 @@ while true; do
     kill -9 "$gateway_pid" >/dev/null 2>&1 || true
   fi
   start_gateway
-  sleep 2
+  sleep "$GATEWAY_RESTART_BACKOFF_SECONDS"
 done
