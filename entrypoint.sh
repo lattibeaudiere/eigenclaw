@@ -13,6 +13,9 @@
 
 set -exuo pipefail
 
+# Hint to CLIs to avoid TTY prompts (OpenClaw updates can become interactive otherwise)
+export CI=1
+
 CHUTES_BASE_URL="https://llm.chutes.ai/v1"
 CHUTES_DEFAULT_MODEL_REF="chutes/zai-org/GLM-4.7-TEE"   # TEE model — end-to-end verifiable
 CHUTES_FAST_MODEL_REF="chutes/zai-org/GLM-4.7-Flash"
@@ -43,8 +46,10 @@ fi
 
 # ── 3. Authenticate Chutes (non-interactive, via env var) ────────────────────
 log "Authenticating with Chutes..."
-echo "$CHUTES_API_KEY" | openclaw models auth paste-token --provider chutes 2>&1
-log "Chutes auth applied."
+# Newer OpenClaw builds may prompt interactively even with stdin. Use timeout +
+# non-interactive flags and continue if auth is already present.
+timeout 20s bash -lc "echo \"$CHUTES_API_KEY\" | openclaw models auth paste-token --provider chutes --non-interactive 2>&1" || true
+log "Chutes auth step complete (best-effort)."
 
 # ── 4. Fetch live model list + apply config atomically ───────────────────────
 log "Fetching Chutes model catalog..."
