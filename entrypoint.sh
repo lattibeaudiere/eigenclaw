@@ -221,6 +221,46 @@ rollup_memory || true
 python3 /app/agent/scripts/headless_audit.py --once 2>&1 || true
 start_audit_pulse || true
 
-# ── 9. Start OpenClaw gateway ─────────────────────────────────────────────────
-log "Starting OpenClaw gateway on lan:$GATEWAY_PORT..."
-exec openclaw gateway run --bind lan --port "$GATEWAY_PORT"
+# ── 9. Start OpenClaw gateway (supervised) ────────────────────────────────────
+# IMPORTANT: The Control UI has an "Update & Restart" action (RPC: update.run)
+# that can trigger a full-process restart where the gateway exits and spawns a
+# replacement process. If the gateway is PID 1 (via exec), the container exits
+# and your domain goes dark.
+#
+# So: run a tiny watchdog that keeps the container alive and ensures the gateway
+# is responding on localhost. This makes restarts/updates non-fatal.
+
+# Best-effort: disable update hints/auto-updater (safe if keys unsupported)
+openclaw config set update.checkOnStart false 2>&1 || true
+openclaw config set update.auto.enabled false 2>&1 || true
+
+gateway_pid=""
+start_gateway() {
+  log "Starting OpenClaw gateway on lan:$GATEWAY_PORT..."
+  openclaw gateway run --bind lan --port "$GATEWAY_PORT" >/tmp/openclaw-gateway.out 2>&1 &
+  gateway_pid="$!"
+  log "Gateway process started pid=$gateway_pid"
+}
+
+gateway_ok() {
+  # Canvas mount is consistently present when gateway is up.
+  curl -fsS "http://127.0.0.1:${GATEWAY_PORT}/__openclaw__/canvas/" >/dev/null 2>&1
+}
+
+start_gateway
+
+while true; do
+  if gateway_ok; then
+    sleep 10
+    continue
+  fi
+
+  log "Gateway health check failed; restarting..."
+  if [ -n "${gateway_pid:-}" ]; then
+    kill "$gateway_pid" >/dev/null 2>&1 || true
+    sleep 1
+    kill -9 "$gateway_pid" >/dev/null 2>&1 || true
+  fi
+  start_gateway
+  sleep 2
+done
