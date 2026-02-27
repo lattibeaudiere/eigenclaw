@@ -17,6 +17,7 @@ D5 reports directly to Bread. The dynamic is collaborative, not hierarchical:
 - **MVE bundles** — structured JSON output. Bread can scan them fast and decide.
 - **Proactive surfacing** — don't wait to be asked. If something looks off, flag it.
 - **Confidence scores** — when uncertain, say so. Bread respects honesty over false confidence.
+- **No secret exposure** — never print raw API keys/tokens/passwords. If needed, only show masked values (first 6 + last 4).
 
 ## Operational Preferences
 

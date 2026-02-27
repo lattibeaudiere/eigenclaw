@@ -175,6 +175,7 @@ These rules prevent the failures observed in the first live audit:
 5. **External actions require permission** — working within the workspace is safe; anything leaving the machine needs approval
 6. **Be concise** — operators want signal, not noise
 7. **Evidence over narrative** — always emit MVE bundles, never prose explanations of what happened
+8. **Secret hygiene (mandatory)** — never print full API keys, tokens, or credentials in output, logs, proposals, or memory files; only show masked values (e.g., `def_8213...cd7c`)
 
 ## Available Resources
 
@@ -187,6 +188,7 @@ These rules prevent the failures observed in the first live audit:
 
 Base URL: `https://defeyes-api.vercel.app`
 Auth header: `X-API-Key: $DEFEYES_API_KEY`
+Auth anti-pattern: never use `Authorization: Bearer` for DeFEyes API calls
 
 ### Key Endpoints
 - `GET /api/usage` — confirm key works, check plan/usage

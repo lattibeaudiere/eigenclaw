@@ -145,8 +145,13 @@ openclaw config set gateway.controlUi.dangerouslyDisableDeviceAuth true 2>&1 || 
 # Newer OpenClaw builds require explicit Control UI origins for non-loopback access.
 # In EigenCompute we sit behind an ingress proxy, so allow Host-header fallback and
 # also set explicit origins if DOMAIN is provided.
-if [ -n "${DOMAIN:-}" ]; then
-  openclaw config set gateway.controlUi.allowedOrigins --json "[\"https://${DOMAIN}\",\"https://www.${DOMAIN}\"]" 2>&1 || true
+if [ -n "${CONTROL_UI_ALLOWED_ORIGINS_JSON:-}" ]; then
+  # Optional explicit override (must be a JSON array string).
+  openclaw config set gateway.controlUi.allowedOrigins --json "${CONTROL_UI_ALLOWED_ORIGINS_JSON}" 2>&1 || true
+elif [ -n "${DOMAIN:-}" ]; then
+  # Include common exact-origin variants because some builds match strictly.
+  ORIGINS_JSON="[\"https://${DOMAIN}\",\"https://${DOMAIN}:443\",\"http://${DOMAIN}\",\"http://${DOMAIN}:80\",\"https://www.${DOMAIN}\",\"https://www.${DOMAIN}:443\",\"http://www.${DOMAIN}\",\"http://www.${DOMAIN}:80\"]"
+  openclaw config set gateway.controlUi.allowedOrigins --json "${ORIGINS_JSON}" 2>&1 || true
 fi
 openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true 2>&1 || true
 openclaw config set gateway.auth.pairingRequired false 2>&1 || true
