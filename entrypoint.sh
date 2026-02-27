@@ -158,7 +158,20 @@ openclaw config set gateway.auth.pairingRequired false 2>&1 || true
 openclaw config set gateway.trustedProxies '["127.0.0.1/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]' 2>&1 || true
 log "Pairing requirement bypassed; trusted proxies set."
 
-# ── 7. Export DeFEyes API for skills/tools ────────────────────────────────────
+# ── 7. Configure Telegram channel (optional) ──────────────────────────────────
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+  # OpenClaw Telegram channel requires botToken in config or TELEGRAM_BOT_TOKEN env.
+  # We set both so Control UI shows "Configured: Yes" deterministically.
+  openclaw config set channels.telegram.enabled true 2>&1 || true
+  openclaw config set channels.telegram.botToken "$TELEGRAM_BOT_TOKEN" 2>&1 || true
+  openclaw config set channels.telegram.dmPolicy pairing 2>&1 || true
+  openclaw config set channels.telegram.groupPolicy allowlist 2>&1 || true
+  log "Telegram channel configured (token masked: ${TELEGRAM_BOT_TOKEN:0:6}...)."
+else
+  log "TELEGRAM_BOT_TOKEN not set — Telegram channel disabled."
+fi
+
+# ── 8. Export DeFEyes API for skills/tools ────────────────────────────────────
 export DEFEYES_BASE_URL
 if [ -n "${DEFEYES_API_KEY:-}" ]; then
   log "DeFEyes API configured: $DEFEYES_BASE_URL (key: ${DEFEYES_API_KEY:0:8}...)"
@@ -166,7 +179,7 @@ else
   log "WARNING: DEFEYES_API_KEY not set — DeFi enrichment unavailable."
 fi
 
-# ── 8. Continuous Memory + Automation Pulse ───────────────────────────────────
+# ── 9. Continuous Memory + Automation Pulse ───────────────────────────────────
 WORKSPACE_DIR="$HOME/.openclaw/workspace"
 MEMORY_DIR="$WORKSPACE_DIR/memory"
 AUDIT_LOG_PATH="$WORKSPACE_DIR/AUDIT_LOG.md"
@@ -231,7 +244,7 @@ rollup_memory || true
 python3 /app/agent/scripts/headless_audit.py --once 2>&1 || true
 start_audit_pulse || true
 
-# ── 9. Start OpenClaw gateway (supervised) ────────────────────────────────────
+# ── 10. Start OpenClaw gateway (supervised) ───────────────────────────────────
 # IMPORTANT: The Control UI has an "Update & Restart" action (RPC: update.run)
 # that can trigger a full-process restart where the gateway exits and spawns a
 # replacement process. If the gateway is PID 1 (via exec), the container exits
