@@ -48,7 +48,8 @@
         "skills": [
           "tx_labeler",
           "chainlink_price",
-          "arbitrum_rpc"
+          "arbitrum_rpc",
+          "chutes_tts"
         ]
       }
     ]

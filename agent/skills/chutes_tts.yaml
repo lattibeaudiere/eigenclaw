@@ -1,0 +1,32 @@
+name: chutes_tts
+version: "1.0.0"
+description: >
+  Generate speech audio using Chutes CSM-1B (/speak).
+  Returns MEDIA output and [[audio_as_voice]] marker for Telegram voice-note delivery.
+
+triggers:
+  - "tts"
+  - "text to speech"
+  - "speak this"
+  - "voice reply"
+  - "telegram voice"
+  - "csm-1b"
+  - "chutes tts"
+
+tools:
+  - name: tts_speak
+    description: >
+      Convert text to speech via Chutes CSM-1B.
+      Input can be plain text, or JSON:
+      {"text":"hello","speaker":1,"max_duration_ms":10000}
+    type: exec
+    command: python3
+    args:
+      - /app/agent/skills/_chutes_tts.py
+      - "{{input}}"
+
+examples:
+  - user: "Reply to this by voice"
+    assistant: |
+      {"text":"Understood. Running the audit now.","speaker":1,"max_duration_ms":12000}
+

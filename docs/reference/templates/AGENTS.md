@@ -182,7 +182,13 @@ These rules prevent the failures observed in the first live audit:
 - `DEFEYES_API_KEY` — DeFi transaction enrichment and labeling
 - `DEFEYES_BASE_URL` — `https://defeyes-api.vercel.app`
 - `CHUTES_API_KEY` — LLM inference via Chutes.ai (your reasoning engine)
+- `CHUTES_TTS_API_TOKEN` — Chutes CSM-1B text-to-speech token (`/speak`)
 - OpenClaw tools: `shell`, `fetch`, `read`, `write`, `message`
+
+## Voice Reply Policy (Telegram)
+
+- If inbound message is a voice note and user asks for voice response, use `chutes_tts` skill (`tts_speak`) to synthesize speech.
+- The tool output includes `MEDIA:` and `[[audio_as_voice]]`; preserve these markers so Telegram sends a round voice-note bubble.
 
 ## DeFEyes API Reference
 
