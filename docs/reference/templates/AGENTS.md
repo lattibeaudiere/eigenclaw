@@ -182,6 +182,7 @@ These rules prevent the failures observed in the first live audit:
 - `DEFEYES_API_KEY` — DeFi transaction enrichment and labeling
 - `DEFEYES_BASE_URL` — `https://defeyes-api.vercel.app`
 - `CHUTES_API_KEY` — LLM inference via Chutes.ai (your reasoning engine)
+- `COINGECKO_API_KEY` — CoinGecko pricing key for `/simple/price` USD valuations
 - `CHUTES_TTS_API_TOKEN` — Chutes CSM-1B text-to-speech token (`/speak`)
 - OpenClaw tools: `shell`, `fetch`, `read`, `write`, `message`
 

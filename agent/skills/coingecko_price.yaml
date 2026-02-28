@@ -1,0 +1,33 @@
+name: coingecko_price
+version: "1.0.0"
+description: >
+  Fetches latest token prices and market stats from CoinGecko /simple/price.
+  Useful for USD valuation when protocol-native events don't include fiat value.
+
+triggers:
+  - "coingecko price"
+  - "get usd value"
+  - "price gho"
+  - "fiat equivalent"
+  - "fetch token prices"
+
+tools:
+  - name: get_simple_price
+    description: >
+      Fetch token prices from CoinGecko.
+      Input can be CSV symbols (e.g. GHO,USDC,WETH) or JSON:
+      {"symbols":["GHO","USDC"],"vs_currency":"usd"}
+      {"ids":["gho","usd-coin"],"vs_currency":"usd"}
+    type: exec
+    command: python3
+    args:
+      - /app/agent/skills/_coingecko_price.py
+      - "{{input}}"
+    response:
+      format: json
+
+examples:
+  - user: "Get GHO and WETH prices in USD"
+    assistant: |
+      {"symbols":["GHO","WETH"],"vs_currency":"usd"}
+
