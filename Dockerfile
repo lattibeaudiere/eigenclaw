@@ -23,7 +23,7 @@ WORKDIR /app
 
 # ── System deps ───────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip curl ca-certificates \
+    python3 python3-pip curl ca-certificates ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # ── OpenClaw + long (WhatsApp peer dep) ──────────────────────────────────────
