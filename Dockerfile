@@ -49,6 +49,7 @@ COPY agent/skills/    /root/.openclaw/workspace/eigenclaw/skills/
 # ── Entrypoint script ─────────────────────────────────────────────────────────
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+RUN printf '#!/usr/bin/env bash\npython3 /app/agent/scripts/whisper_cli.py "$@"\n' > /usr/local/bin/whisper && chmod +x /usr/local/bin/whisper
 
 # ── Runtime environment ───────────────────────────────────────────────────────
 ENV NODE_ENV=production
