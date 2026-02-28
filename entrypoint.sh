@@ -53,7 +53,8 @@ log "Chutes auth step complete (best-effort)."
 
 # ── 4. Fetch live model list + apply config atomically ───────────────────────
 log "Fetching Chutes model catalog..."
-MODELS_JSON=$(node -e '
+MODELS_JSON=""
+if MODELS_FETCHED_JSON=$(node -e '
 async function run() {
   try {
     const res = await fetch("https://llm.chutes.ai/v1/models");
@@ -79,7 +80,29 @@ async function run() {
     process.exit(1);
   }
 }
-run();' 2>&1 || echo "")
+run();' 2>/tmp/chutes-models.err); then
+  MODELS_JSON="$MODELS_FETCHED_JSON"
+else
+  log "Model catalog fetch failed; will use fallback defaults."
+  if [ -s /tmp/chutes-models.err ]; then
+    log "Catalog error: $(tr '\n' ' ' < /tmp/chutes-models.err | cut -c1-220)"
+  fi
+fi
+
+# Validate fetched JSON shape before using it in node config interpolation.
+if [ -n "$MODELS_JSON" ]; then
+  if ! node -e '
+try {
+  const parsed = JSON.parse(process.argv[1]);
+  if (!Array.isArray(parsed)) process.exit(2);
+} catch {
+  process.exit(1);
+}
+' "$MODELS_JSON" >/dev/null 2>&1; then
+    log "Fetched model catalog is invalid JSON; using fallback defaults."
+    MODELS_JSON=""
+  fi
+fi
 
 # Fallback to known models if API unreachable
 if [ -z "$MODELS_JSON" ]; then
