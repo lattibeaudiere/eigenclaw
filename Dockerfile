@@ -18,7 +18,7 @@
 #
 # Optimized for <600s cloud build (EigenCompute limit): slim base, layer order.
 
-FROM --platform=linux/amd64 node:22-bookworm-slim
+FROM --platform=linux/amd64 node:22-bookworm
 
 USER root
 WORKDIR /app
