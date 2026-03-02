@@ -15,23 +15,26 @@
 #
 # Deploy:
 #   ecloud compute app deploy  →  "Build and deploy from Dockerfile"
+#
+# Optimized for <600s cloud build (EigenCompute limit): slim base, layer order.
 
-FROM --platform=linux/amd64 node:22-bookworm
+FROM --platform=linux/amd64 node:22-bookworm-slim
 
 USER root
 WORKDIR /app
 
-# ── System deps ───────────────────────────────────────────────────────────────
+# ── System deps (slim base, single layer, cleanup) ──────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip curl ca-certificates ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+    python3 python3-pip ca-certificates curl ffmpeg \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ── Python deps first (heaviest; better cache when code changes) ───────────────
+COPY requirements.txt .
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 # ── OpenClaw + long (WhatsApp peer dep) ──────────────────────────────────────
-RUN npm install -g openclaw@latest long@latest
-
-# ── Python skill dependencies ─────────────────────────────────────────────────
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+RUN npm install -g --omit=optional openclaw@latest long@latest
 
 # ── Application code ──────────────────────────────────────────────────────────
 COPY chutes/         ./chutes/

@@ -1,0 +1,39 @@
+# Build EigenClaw image and report timing — no local Docker needed.
+# Push to GitHub; Actions runs the build. Check timing in the job summary.
+#
+# If build completes in <8 min, EigenCompute's 600s limit may be reachable
+# (cloud env differs; use as a ballpark).
+
+name: Build test
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        run: |
+          start=$(date +%s)
+          docker build --no-cache -t eigenclaw:test .
+          end=$(date +%s)
+          echo "BUILD_SECONDS=$((end - start))" >> $GITHUB_ENV
+          echo "Build completed in $((end - start)) seconds"
+
+      - name: Build summary
+        run: |
+          echo "### Build timing" >> $GITHUB_STEP_SUMMARY
+          echo "Duration: ${BUILD_SECONDS} seconds" >> $GITHUB_STEP_SUMMARY
+          if [ "${BUILD_SECONDS}" -lt 480 ]; then
+            echo "Status: Under 8 min — likely OK for EigenCompute 600s limit" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Status: Over 8 min — may hit EigenCompute timeout" >> $GITHUB_STEP_SUMMARY
+          fi
