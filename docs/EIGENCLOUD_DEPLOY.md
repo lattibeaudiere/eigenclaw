@@ -18,6 +18,49 @@
 - EigenCompute subscription: `ecloud billing subscribe`
 - `.env` with required keys (CHUTES_API_KEY, OPENCLAW_TOKEN, etc.)
 
+## Mainnet Migration
+
+To escape Sepolia-specific issues (409 concurrency blocks, stuck builds, 600s timeouts, 429 throttling), switch to mainnet-alpha. Mainnet uses scaled production infrastructure.
+
+**Before first mainnet deploy**, update `.env`: set `NETWORK_PUBLIC=mainnet` and `EIGENAI_BASE_URL=https://eigenai.eigencloud.xyz/v1` (see `.env.example`).
+
+**Prerequisites (run before first mainnet deploy):**
+
+1. Update CLI: `npm install -g @layr-labs/ecloud-cli`
+2. Verify auth: `ecloud auth whoami`
+3. Billing: `ecloud billing subscribe` (required for mainnet; $100 credit for new customers)
+4. Switch env: `ecloud compute env set mainnet-alpha --yes`
+5. Confirm: `ecloud auth whoami` should show Mainnet
+6. Fund wallet: ~0.01–0.05 mainnet ETH for deployment gas (real ETH)
+
+**Quick run:** `.\scripts\mainnet-next-steps.ps1` (or `-SkipBilling` to skip the browser step)
+
+**First mainnet deploy** (creates new app; Sepolia app ID is incompatible):
+
+```powershell
+ecloud compute app deploy --verifiable `
+  --repo https://github.com/lattibeaudiere/eigenclaw `
+  --commit 0f0a1f1 `
+  --instance-type g1-standard-4t `
+  --env-file .env `
+  --name eigenclaw `
+  --log-visibility private `
+  --resource-usage-monitoring enable
+```
+
+Capture the **new App ID** from the output.
+
+**Subsequent upgrades** (use new app ID):
+
+```powershell
+$env:ECLOUD_APP_ID = "<NEW_APP_ID>"
+.\scripts\eigencloud-build-standalone.ps1
+```
+
+Or: `.\scripts\eigencloud-build-standalone.ps1 -AppId <NEW_APP_ID>`
+
+**Switch back to Sepolia:** `ecloud compute env set sepolia`
+
 ## Option A: Upgrade Existing Pod (EigenClaw only)
 
 Upgrade the current EigenClaw app with latest code:
@@ -108,7 +151,7 @@ Or manually:
 
 ### Build timeout (600 seconds)
 
-EigenCompute verifiable builds have a **10-minute (600s) hard limit** per build. If you see:
+EigenCompute verifiable builds have a **10-minute (600s) hard limit** on both Sepolia and mainnet-alpha (shared backend). If you see:
 
 ```
 Build failed: Build step failure: build exceed the duration(seconds:600)
@@ -118,20 +161,20 @@ the Docker build exceeded that limit. The 429s you may see during polling can oc
 
 **Fixes to try:**
 
-1. **Optimize the Dockerfile**
-   - Use a slimmer base (e.g. `python:3.11-slim` or `node:22-slim` instead of `node:22-bookworm`)
+1. **Optimize the Dockerfile** (this repo already applies these)
+   - **CPU-only torch**: Install `torch torchaudio` with `--index-url https://download.pytorch.org/whl/cpu` *before* faster-whisper — avoids ~2GB CUDA download
    - Put slow steps first (apt, pip, npm) so layers cache; copy app code last
-   - Pre-build heavy deps in a multi-stage build; copy artifacts into a slim final image
-   - Remove caches: `rm -rf /var/lib/apt/lists/*` (already present)
+   - Remove caches: `rm -rf /var/lib/apt/lists/* /root/.cache/pip/*`
    - Test locally: `docker build --no-cache .` — aim for **&lt;8 minutes** to leave headroom
-   - Or use **GitHub Actions**: push to `main`; the `Build test` workflow runs the build and reports timing (no local Docker needed)
+   - **Profile**: Add `echo "START: step" && date` / `echo "END: step" && date` around slow RUNs; grep build logs to find bottlenecks
+   - Or use **GitHub Actions**: push to `main`; the `Build test` workflow runs the build and reports timing
 
-2. **Switch to mainnet**
-   - `ecloud compute env set mainnet` (or check with `ecloud compute env`)
-   - Mainnet alpha may have higher build timeouts or less aggressive throttling
+2. **Escalate to EigenCloud**
+   - EigenLayer Discord → #eigencloud-support or #dev-help: "Verifiable build hits 600s timeout with faster-whisper + ffmpeg (GH Actions ~2.5 min). Any tips or planned timeout increases?"
+   - Share build ID + app ID + Dockerfile snippet
 
 3. **Retry after changes**
-   - Old build IDs (e.g. from failed runs) stay `failed`; focus on new submits after Dockerfile tweaks
+   - Old build IDs stay `failed`; focus on new submits after Dockerfile tweaks
 
 ### 429 Too Many Requests during polling
 
@@ -142,3 +185,13 @@ When `ecloud compute app upgrade` fails with 429 during build status polling, us
 ```
 
 This submits the build, polls with exponential backoff, and upgrades when the build succeeds.
+
+### 409 Build in progress (stuck)
+
+When you see **409 — "You already have a build in progress"** but `ecloud compute build list` shows only `success`/`failed` (no active builds), the backend may have a stale lock.
+
+**Steps:**
+1. Run `ecloud compute build list --json` and check the most recent build IDs and statuses.
+2. For any suspected stuck build: `ecloud compute build status <id>` and `ecloud compute build info <id> --json`.
+3. Wait 15–30 min; retry `.\scripts\eigencloud-build-standalone.ps1`.
+4. **Escalate to EigenCloud support** (EigenLayer Discord → #eigencloud or #support): provide app ID `0x0c976F51abC812e7f2b1767652085b0588556a94`, build IDs from the list, 409 error + timestamp, and ask to clear the lock. No CLI cancel command exists.
