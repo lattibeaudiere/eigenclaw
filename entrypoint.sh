@@ -194,6 +194,19 @@ else
   log "TELEGRAM_BOT_TOKEN not set — Telegram channel disabled."
 fi
 
+# ── 7b. Configure Firecrawl fallback for web_fetch ─────────────────────────────
+if [ -n "${FIRECRAWL_BASE_URL:-}" ]; then
+  openclaw config set tools.web.fetch.firecrawl.enabled true 2>&1 || true
+  openclaw config set tools.web.fetch.firecrawl.baseUrl "$FIRECRAWL_BASE_URL" 2>&1 || true
+  openclaw config set tools.web.fetch.firecrawl.apiKey "${FIRECRAWL_API_KEY:-}" 2>&1 || true
+  openclaw config set tools.web.fetch.firecrawl.onlyMainContent true 2>&1 || true
+  openclaw config set tools.web.fetch.firecrawl.maxAgeMs "${FIRECRAWL_MAX_AGE_MS:-86400000}" 2>&1 || true
+  openclaw config set tools.web.fetch.firecrawl.timeoutSeconds "${FIRECRAWL_TIMEOUT_SECONDS:-60}" 2>&1 || true
+  log "Firecrawl fallback configured: $FIRECRAWL_BASE_URL"
+else
+  log "FIRECRAWL_BASE_URL not set — web_fetch uses Readability only."
+fi
+
 # ── 8. Export DeFEyes API for skills/tools ────────────────────────────────────
 export DEFEYES_BASE_URL
 if [ -n "${DEFEYES_API_KEY:-}" ]; then
