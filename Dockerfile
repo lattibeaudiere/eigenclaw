@@ -27,9 +27,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── OpenClaw + long (WhatsApp peer dep) ──────────────────────────────────────
-RUN npm install -g openclaw@latest long@latest
+RUN npm install -g openclaw@2026.3.2 long@latest
 
 # ── Python skill dependencies ─────────────────────────────────────────────────
+# requirements.txt installs CPU-only torch first to avoid the ~2GB CUDA download
+# that faster-whisper would otherwise pull in.
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
@@ -48,12 +50,13 @@ COPY agent/skills/    /root/.openclaw/workspace/eigenclaw/skills/
 
 # ── Entrypoint script ─────────────────────────────────────────────────────────
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-RUN printf '#!/usr/bin/env bash\npython3 /app/agent/scripts/whisper_cli.py "$@"\n' > /usr/local/bin/whisper && chmod +x /usr/local/bin/whisper
+RUN chmod +x /entrypoint.sh && \
+    printf '#!/usr/bin/env bash\npython3 /app/agent/scripts/whisper_cli.py "$@"\n' > /usr/local/bin/whisper && \
+    chmod +x /usr/local/bin/whisper
 
 # ── Runtime environment ───────────────────────────────────────────────────────
-ENV NODE_ENV=production
-ENV NETWORK_PUBLIC=sepolia
+ENV NODE_ENV=production \
+    NETWORK_PUBLIC=sepolia
 # CHUTES_API_KEY + MNEMONIC injected by EigenCompute KMS at deploy time
 
 # OpenClaw gateway port
