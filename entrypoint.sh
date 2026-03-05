@@ -1,34 +1,34 @@
 #!/usr/bin/env bash
-# EigenClaw entrypoint — runs inside EigenCompute TEE at container startup.
+# EigenClaw entrypoint — runs inside container at startup.
 #
-# What this does (adapted from ParaClaw init.sh for non-interactive TEE use):
+# What this does:
 #   1. Validates CHUTES_API_KEY is present
-#   2. Seeds OpenClaw config if first boot
+#   2. Seeds OpenClaw config if first boot (openclaw onboard)
 #   3. Authenticates Chutes using env var (no TTY needed)
-#   4. Fetches live model list from Chutes API + applies config atomically
-#   5. Starts OpenClaw gateway on 0.0.0.0:18789 (TEE requires 0.0.0.0)
+#   4. Merges ALL config atomically via Python (single JSON write)
+#   5. Starts OpenClaw gateway on 0.0.0.0:18789
 #
-# Required env (injected by EigenCompute at deploy time):
-#   CHUTES_API_KEY   — from chutes.ai dashboard
+# PERF FIX: Previous version called `openclaw config set` 15+ times. Each call
+# triggers a Doctor diagnostic taking ~60s. Total boot: 20+ min.
+# Now we merge all config in a single Python JSON write: ~2s total.
 
 set -exuo pipefail
 
-# Hint to CLIs to avoid TTY prompts (OpenClaw updates can become interactive otherwise)
 export CI=1
 
 CHUTES_BASE_URL="https://llm.chutes.ai/v1"
-CHUTES_DEFAULT_MODEL_REF="chutes/zai-org/GLM-4.7-TEE"   # TEE model — end-to-end verifiable
+CHUTES_DEFAULT_MODEL_REF="chutes/zai-org/GLM-4.7-TEE"
 CHUTES_FAST_MODEL_REF="chutes/zai-org/GLM-4.7-Flash"
 DEFEYES_BASE_URL="https://defeyes-api.vercel.app"
 GATEWAY_PORT=18789
 
 log() { echo "[eigenclaw] $*"; }
 
-# ── 0. Debug: TLS/networking env + permissions (non-sensitive) ───────────────
+# ── 0. Debug ─────────────────────────────────────────────────────────────────
 log "Env check: DOMAIN=${DOMAIN:-<unset>} APP_PORT=${APP_PORT:-<unset>} ACME_STAGING=${ACME_STAGING:-<unset>}"
 log "User: $(whoami) uid=$(id -u) | Caddy: $(test -x /usr/local/bin/caddy && getcap /usr/local/bin/caddy 2>/dev/null || echo 'N/A')"
 
-# ── 1. Validate ───────────────────────────────────────────────────────────────
+# ── 1. Validate ──────────────────────────────────────────────────────────────
 if [ -z "${CHUTES_API_KEY:-}" ]; then
   log "ERROR: CHUTES_API_KEY is not set."
   log "Pass it at deploy time: ecloud compute app deploy --env CHUTES_API_KEY=xxx"
@@ -36,25 +36,45 @@ if [ -z "${CHUTES_API_KEY:-}" ]; then
 fi
 log "CHUTES_API_KEY present — starting setup..."
 
+if [ -z "${OPENCLAW_TOKEN:-}" ]; then
+  log "ERROR: OPENCLAW_TOKEN is required for Fly.io (OpenClaw refuses 0.0.0.0 without auth)."
+  log "Set it: fly secrets set OPENCLAW_TOKEN=your_token"
+  exit 1
+fi
+export OPENCLAW_GATEWAY_TOKEN="$OPENCLAW_TOKEN"
+
 # ── 2. Seed OpenClaw config if first boot ────────────────────────────────────
+if [ "${OPENCLAW_ENABLE_FIRECRAWL_CONFIG:-false}" != "true" ] && [ -f "$HOME/.openclaw/openclaw.json" ]; then
+  if python3 - "$HOME/.openclaw/openclaw.json" <<'PY'
+import pathlib, sys
+cfg = pathlib.Path(sys.argv[1])
+text = cfg.read_text(errors="ignore")
+sys.exit(0 if '"firecrawl"' in text else 1)
+PY
+  then
+    log "Detected incompatible firecrawl config keys; resetting OpenClaw config."
+    rm -f "$HOME/.openclaw/openclaw.json"
+  fi
+fi
+
 if [ ! -f "$HOME/.openclaw/openclaw.json" ]; then
   log "First boot — seeding OpenClaw config..."
   openclaw onboard --non-interactive --accept-risk --auth-choice skip 2>&1 || true
-  openclaw config set gateway.mode local 2>&1
-  log "Config seeded."
+  log "Config seeded (gateway.mode set in atomic merge below)."
 fi
 
-# ── 3. Authenticate Chutes (non-interactive, via env var) ────────────────────
+# ── 3. Authenticate Chutes (non-interactive) ─────────────────────────────────
 log "Authenticating with Chutes..."
-# Newer OpenClaw builds may prompt interactively even with stdin. Use timeout +
-# non-interactive flags and continue if auth is already present.
-timeout 20s bash -lc "echo \"$CHUTES_API_KEY\" | openclaw models auth paste-token --provider chutes --non-interactive 2>&1" || true
+CHUTES_TOKEN_DIR="$HOME/.openclaw/auth"
+mkdir -p "$CHUTES_TOKEN_DIR"
+echo "$CHUTES_API_KEY" > "$CHUTES_TOKEN_DIR/chutes.token" 2>/dev/null || true
+timeout 10s bash -c "printf '%s\n' '$CHUTES_API_KEY' | openclaw models auth paste-token --provider chutes 2>&1" </dev/null || true
 log "Chutes auth step complete (best-effort)."
 
-# ── 4. Fetch live model list + apply config atomically ───────────────────────
+# ── 4. Build model list ──────────────────────────────────────────────────────
 log "Fetching Chutes model catalog..."
 MODELS_JSON=""
-if MODELS_FETCHED_JSON=$(node -e '
+if [ "${OPENCLAW_FETCH_MODEL_CATALOG:-false}" = "true" ] && MODELS_FETCHED_JSON=$(node -e '
 async function run() {
   try {
     const res = await fetch("https://llm.chutes.ai/v1/models");
@@ -83,13 +103,16 @@ async function run() {
 run();' 2>/tmp/chutes-models.err); then
   MODELS_JSON="$MODELS_FETCHED_JSON"
 else
-  log "Model catalog fetch failed; will use fallback defaults."
-  if [ -s /tmp/chutes-models.err ]; then
-    log "Catalog error: $(tr '\n' ' ' < /tmp/chutes-models.err | cut -c1-220)"
+  if [ "${OPENCLAW_FETCH_MODEL_CATALOG:-false}" = "true" ]; then
+    log "Model catalog fetch failed; will use fallback defaults."
+    if [ -s /tmp/chutes-models.err ]; then
+      log "Catalog error: $(tr '\n' ' ' < /tmp/chutes-models.err | cut -c1-220)"
+    fi
+  else
+    log "Skipping full model-catalog fetch (OPENCLAW_FETCH_MODEL_CATALOG is not true)."
   fi
 fi
 
-# Validate fetched JSON shape before using it in node config interpolation.
 if [ -n "$MODELS_JSON" ]; then
   if ! node -e '
 try {
@@ -104,7 +127,6 @@ try {
   fi
 fi
 
-# Fallback to known models if API unreachable
 if [ -z "$MODELS_JSON" ]; then
   log "Could not fetch model catalog — using defaults."
   MODELS_JSON='[
@@ -114,108 +136,124 @@ if [ -z "$MODELS_JSON" ]; then
   ]'
 fi
 
-log "Applying provider + agent config..."
+# ── 5. Atomic config merge (replaces 15+ individual openclaw config set) ─────
+log "Merging all config atomically via Python..."
 
-PROVIDER_CONFIG=$(node -e "
-const config = {
-  baseUrl: '$CHUTES_BASE_URL',
-  api: 'openai-completions',
-  auth: 'api-key',
-  models: $MODELS_JSON
-};
-console.log(JSON.stringify(config));
-")
-openclaw config set models.providers.chutes --json "$PROVIDER_CONFIG" 2>&1
-
-AGENT_DEFAULTS=$(node -e "
-const modelsJson = $MODELS_JSON;
-const modelEntries = {};
-modelsJson.forEach(m => { modelEntries['chutes/' + m.id] = {}; });
-modelEntries['chutes-fast']   = { alias: '$CHUTES_FAST_MODEL_REF' };
-modelEntries['chutes-pro']    = { alias: 'chutes/deepseek-ai/DeepSeek-V3.2-TEE' };
-modelEntries['chutes-vision'] = { alias: 'chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506' };
-
-const config = {
-  model: {
-    primary: '$CHUTES_DEFAULT_MODEL_REF',
-    fallbacks: ['chutes/deepseek-ai/DeepSeek-V3.2-TEE', 'chutes/zai-org/GLM-4.7-Flash']
-  },
-  imageModel: {
-    primary: 'chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506',
-    fallbacks: ['chutes/zai-org/GLM-4.7-Flash']
-  },
-  models: modelEntries
-};
-console.log(JSON.stringify(config));
-")
-openclaw config set agents.defaults --json "$AGENT_DEFAULTS" 2>&1
-openclaw config set auth.profiles.\"chutes:manual\" --json '{"provider":"chutes","mode":"api_key"}' 2>&1
-
-log "Config applied. Primary model: $CHUTES_DEFAULT_MODEL_REF (TEE)"
-
-# ── 5. Set gateway token for dashboard auth ──────────────────────────────────
-if [ -n "${OPENCLAW_TOKEN:-}" ]; then
-  export OPENCLAW_GATEWAY_TOKEN="$OPENCLAW_TOKEN"
-  openclaw config set gateway.auth.token "$OPENCLAW_TOKEN" 2>&1 || true
-  log "Gateway token set from env: ${OPENCLAW_TOKEN:0:6}..."
-else
-  log "WARNING: OPENCLAW_TOKEN not set — dashboard will reject connections."
-fi
-
-# ── 6. Bypass device-pairing requirement (no exec into TEE) ──────────────────
-openclaw config set gateway.controlUi.allowInsecureAuth true 2>&1 || true
-openclaw config set gateway.controlUi.dangerouslyDisableDeviceAuth true 2>&1 || true
-# Newer OpenClaw builds require explicit Control UI origins for non-loopback access.
-# In EigenCompute we sit behind an ingress proxy, so allow Host-header fallback and
-# also set explicit origins if DOMAIN is provided.
+ORIGINS_JSON="[]"
 if [ -n "${CONTROL_UI_ALLOWED_ORIGINS_JSON:-}" ]; then
-  # Optional explicit override (must be a JSON array string).
-  openclaw config set gateway.controlUi.allowedOrigins --json "${CONTROL_UI_ALLOWED_ORIGINS_JSON}" 2>&1 || true
+  ORIGINS_JSON="${CONTROL_UI_ALLOWED_ORIGINS_JSON}"
 elif [ -n "${DOMAIN:-}" ]; then
-  # Include common exact-origin variants because some builds match strictly.
   ORIGINS_JSON="[\"https://${DOMAIN}\",\"https://${DOMAIN}:443\",\"http://${DOMAIN}\",\"http://${DOMAIN}:80\",\"https://www.${DOMAIN}\",\"https://www.${DOMAIN}:443\",\"http://www.${DOMAIN}\",\"http://www.${DOMAIN}:80\"]"
-  openclaw config set gateway.controlUi.allowedOrigins --json "${ORIGINS_JSON}" 2>&1 || true
-fi
-openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true 2>&1 || true
-openclaw config set gateway.auth.pairingRequired false 2>&1 || true
-openclaw config set gateway.trustedProxies '["127.0.0.1/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]' 2>&1 || true
-log "Pairing requirement bypassed; trusted proxies set."
-
-# ── 7. Configure Telegram channel (optional) ──────────────────────────────────
-if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
-  # OpenClaw Telegram channel requires botToken in config or TELEGRAM_BOT_TOKEN env.
-  # We set both so Control UI shows "Configured: Yes" deterministically.
-  openclaw config set channels.telegram.enabled true 2>&1 || true
-  openclaw config set channels.telegram.botToken "$TELEGRAM_BOT_TOKEN" 2>&1 || true
-  openclaw config set channels.telegram.dmPolicy pairing 2>&1 || true
-  openclaw config set channels.telegram.groupPolicy allowlist 2>&1 || true
-  log "Telegram channel configured (token masked: ${TELEGRAM_BOT_TOKEN:0:6}...)."
-else
-  log "TELEGRAM_BOT_TOKEN not set — Telegram channel disabled."
 fi
 
-# ── 7b. Configure Firecrawl fallback for web_fetch ─────────────────────────────
-if [ -n "${FIRECRAWL_BASE_URL:-}" ]; then
-  openclaw config set tools.web.fetch.firecrawl.enabled true 2>&1 || true
-  openclaw config set tools.web.fetch.firecrawl.baseUrl "$FIRECRAWL_BASE_URL" 2>&1 || true
-  openclaw config set tools.web.fetch.firecrawl.apiKey "${FIRECRAWL_API_KEY:-}" 2>&1 || true
-  openclaw config set tools.web.fetch.firecrawl.onlyMainContent true 2>&1 || true
-  openclaw config set tools.web.fetch.firecrawl.maxAgeMs "${FIRECRAWL_MAX_AGE_MS:-86400000}" 2>&1 || true
-  openclaw config set tools.web.fetch.firecrawl.timeoutSeconds "${FIRECRAWL_TIMEOUT_SECONDS:-60}" 2>&1 || true
-  log "Firecrawl fallback configured: $FIRECRAWL_BASE_URL"
-else
-  log "FIRECRAWL_BASE_URL not set — web_fetch uses Readability only."
-fi
+python3 - "$HOME/.openclaw/openclaw.json" \
+  "$CHUTES_BASE_URL" \
+  "$CHUTES_DEFAULT_MODEL_REF" \
+  "$CHUTES_FAST_MODEL_REF" \
+  "$OPENCLAW_TOKEN" \
+  "$ORIGINS_JSON" \
+  "${TELEGRAM_BOT_TOKEN:-}" \
+  "${FIRECRAWL_BASE_URL:-}" \
+  "${FIRECRAWL_API_KEY:-}" \
+  "${OPENCLAW_ENABLE_FIRECRAWL_CONFIG:-false}" \
+  "$MODELS_JSON" \
+  <<'PYMERGE'
+import json, sys, pathlib
 
-# ── 8. Export DeFEyes API for skills/tools ────────────────────────────────────
+cfg_path   = pathlib.Path(sys.argv[1])
+base_url   = sys.argv[2]
+default_model = sys.argv[3]
+fast_model = sys.argv[4]
+token      = sys.argv[5]
+origins    = json.loads(sys.argv[6])
+tg_token   = sys.argv[7]
+fc_url     = sys.argv[8]
+fc_key     = sys.argv[9]
+fc_enabled = sys.argv[10] == "true"
+models     = json.loads(sys.argv[11])
+
+cfg = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
+
+def deep_set(d, path, val):
+    keys = path.split(".")
+    for k in keys[:-1]:
+        d = d.setdefault(k, {})
+    d[keys[-1]] = val
+
+deep_set(cfg, "models.providers.chutes", {
+    "baseUrl": base_url,
+    "api": "openai-completions",
+    "auth": "api-key",
+    "models": models
+})
+
+model_entries = {}
+for m in models:
+    model_entries["chutes/" + m["id"]] = {}
+model_entries["chutes-fast"]   = {"alias": fast_model}
+model_entries["chutes-pro"]    = {"alias": "chutes/deepseek-ai/DeepSeek-V3.2-TEE"}
+model_entries["chutes-vision"] = {"alias": "chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506"}
+
+deep_set(cfg, "agents.defaults", {
+    "model": {
+        "primary": default_model,
+        "fallbacks": ["chutes/deepseek-ai/DeepSeek-V3.2-TEE", "chutes/zai-org/GLM-4.7-Flash"]
+    },
+    "imageModel": {
+        "primary": "chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506",
+        "fallbacks": ["chutes/zai-org/GLM-4.7-Flash"]
+    },
+    "models": model_entries,
+    "tools": {
+        "allow": ["exec", "read", "web_fetch", "sessions_list", "sessions_history", "sessions_send"],
+        "deny": ["browser", "canvas", "discord", "write", "edit"]
+    }
+})
+
+deep_set(cfg, "auth.profiles.chutes:manual", {"provider": "chutes", "mode": "api_key"})
+
+deep_set(cfg, "gateway.auth.token", token)
+deep_set(cfg, "gateway.controlUi.allowInsecureAuth", True)
+deep_set(cfg, "gateway.controlUi.dangerouslyDisableDeviceAuth", True)
+if origins:
+    deep_set(cfg, "gateway.controlUi.allowedOrigins", origins)
+deep_set(cfg, "gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback", True)
+deep_set(cfg, "gateway.trustedProxies", ["127.0.0.1/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"])
+deep_set(cfg, "gateway.mode", "local")
+# Use custom + 0.0.0.0 for Fly.io (lan may not bind correctly in container)
+deep_set(cfg, "gateway.bind", "custom")
+deep_set(cfg, "gateway.customBindHost", "0.0.0.0")
+deep_set(cfg, "update.checkOnStart", False)
+deep_set(cfg, "update.auto.enabled", False)
+
+if tg_token:
+    deep_set(cfg, "channels.telegram.enabled", True)
+    deep_set(cfg, "channels.telegram.botToken", tg_token)
+    deep_set(cfg, "channels.telegram.dmPolicy", "pairing")
+    deep_set(cfg, "channels.telegram.groupPolicy", "allowlist")
+
+if fc_enabled and fc_url:
+    deep_set(cfg, "tools.web.fetch.firecrawl.enabled", True)
+    deep_set(cfg, "tools.web.fetch.firecrawl.baseUrl", fc_url)
+    deep_set(cfg, "tools.web.fetch.firecrawl.apiKey", fc_key)
+    deep_set(cfg, "tools.web.fetch.firecrawl.onlyMainContent", True)
+    deep_set(cfg, "tools.web.fetch.firecrawl.maxAgeMs", 86400000)
+    deep_set(cfg, "tools.web.fetch.firecrawl.timeoutSeconds", 60)
+
+cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
+print("Config merged successfully.", file=sys.stderr)
+PYMERGE
+
+log "Config merged. Primary model: $CHUTES_DEFAULT_MODEL_REF (TEE)"
+log "Gateway token: ${OPENCLAW_TOKEN:0:6}..."
+[ -n "${TELEGRAM_BOT_TOKEN:-}" ] && log "Telegram configured." || log "Telegram not configured."
+[ "${OPENCLAW_ENABLE_FIRECRAWL_CONFIG:-false}" = "true" ] && [ -n "${FIRECRAWL_BASE_URL:-}" ] && log "Firecrawl: $FIRECRAWL_BASE_URL" || log "Firecrawl: off"
+
+# ── 6. Export DeFEyes API ─────────────────────────────────────────────────────
 export DEFEYES_BASE_URL
-if [ -n "${DEFEYES_API_KEY:-}" ]; then
-  log "DeFEyes API configured: $DEFEYES_BASE_URL (key: ${DEFEYES_API_KEY:0:8}...)"
-else
-  log "WARNING: DEFEYES_API_KEY not set — DeFi enrichment unavailable."
-fi
+[ -n "${DEFEYES_API_KEY:-}" ] && log "DeFEyes: $DEFEYES_BASE_URL" || log "WARNING: DEFEYES_API_KEY not set."
 
-# ── 9. Continuous Memory + Automation Pulse ───────────────────────────────────
+# ── 7. Memory + Audit Pulse ──────────────────────────────────────────────────
 WORKSPACE_DIR="$HOME/.openclaw/workspace"
 MEMORY_DIR="$WORKSPACE_DIR/memory"
 AUDIT_LOG_PATH="$WORKSPACE_DIR/AUDIT_LOG.md"
@@ -223,101 +261,62 @@ AUDIT_LOG_PATH="$WORKSPACE_DIR/AUDIT_LOG.md"
 mkdir -p "$MEMORY_DIR"
 touch "$AUDIT_LOG_PATH" || true
 
-# Consolidate historical memory into a single file for deterministic boot context.
-# This approximates “cat memory/*.md into the system prompt” by creating a rollup
-# file that the agent reads during Session Startup.
 rollup_memory() {
   local rollup="$MEMORY_DIR/_ROLLUP.md"
   : > "$rollup" || true
-
   shopt -s nullglob
   local files=("$MEMORY_DIR"/*.md)
   shopt -u nullglob
-
   for f in "${files[@]}"; do
-    if [ "$(basename "$f")" = "_ROLLUP.md" ]; then
-      continue
-    fi
-    {
-      echo ""
-      echo "---"
-      echo "# $(basename "$f")"
-      echo ""
-      cat "$f"
-      echo ""
-    } >> "$rollup" || true
+    [ "$(basename "$f")" = "_ROLLUP.md" ] && continue
+    { echo ""; echo "---"; echo "# $(basename "$f")"; echo ""; cat "$f"; echo ""; } >> "$rollup" || true
   done
 }
 
 start_audit_pulse() {
   local enabled="${ENABLE_AUDIT_PULSE:-true}"
-  local interval="${AUDIT_PULSE_SECONDS:-14400}" # 4 hours
-
-  if [ "$enabled" != "true" ]; then
-    log "Audit pulse disabled (ENABLE_AUDIT_PULSE=$enabled)."
-    return 0
-  fi
-
-  if [ ! -f "/app/agent/scripts/headless_audit.py" ]; then
-    log "WARNING: headless audit script missing — pulse not started."
-    return 0
-  fi
-
+  local interval="${AUDIT_PULSE_SECONDS:-14400}"
+  [ "$enabled" != "true" ] && { log "Audit pulse disabled."; return 0; }
+  [ ! -f "/app/agent/scripts/headless_audit.py" ] && { log "WARNING: headless audit script missing."; return 0; }
   log "Starting headless audit pulse (every ${interval}s)..."
   (
     while true; do
-      log "Audit pulse: running headless audit now..."
       python3 /app/agent/scripts/headless_audit.py --once 2>&1 || true
       rollup_memory 2>&1 || true
-      log "Audit pulse: sleeping for ${interval}s..."
       sleep "$interval" || true
     done
   ) &
 }
 
 rollup_memory || true
-# Run a single audit once at boot so we can confirm persistence quickly
 python3 /app/agent/scripts/headless_audit.py --once 2>&1 || true
 start_audit_pulse || true
 
-# ── 10. Start OpenClaw gateway (supervised) ───────────────────────────────────
-# IMPORTANT: The Control UI has an "Update & Restart" action (RPC: update.run)
-# that can trigger a full-process restart where the gateway exits and spawns a
-# replacement process. If the gateway is PID 1 (via exec), the container exits
-# and your domain goes dark.
-#
-# So: run a tiny watchdog that keeps the container alive and ensures the gateway
-# is responding on localhost. This makes restarts/updates non-fatal.
-
-# Best-effort: disable update hints/auto-updater (safe if keys unsupported)
-openclaw config set update.checkOnStart false 2>&1 || true
-openclaw config set update.auto.enabled false 2>&1 || true
-
+# ── 8. Start OpenClaw gateway (supervised) ────────────────────────────────────
 gateway_pid=""
 gateway_started_at="0"
-GATEWAY_START_GRACE_SECONDS="${GATEWAY_START_GRACE_SECONDS:-45}"
+GATEWAY_START_GRACE_SECONDS="${GATEWAY_START_GRACE_SECONDS:-180}"
 GATEWAY_RESTART_BACKOFF_SECONDS="${GATEWAY_RESTART_BACKOFF_SECONDS:-5}"
 start_gateway() {
-  log "Starting OpenClaw gateway on lan:$GATEWAY_PORT..."
+  log "Starting OpenClaw gateway on 0.0.0.0:$GATEWAY_PORT (bind=custom)..."
   gateway_started_at="$(date +%s)"
-  # Let gateway logs flow to platform logs for visibility.
-  openclaw gateway run --bind lan --port "$GATEWAY_PORT" 2>&1 &
+  openclaw gateway run --bind custom --port "$GATEWAY_PORT" 2>&1 &
   gateway_pid="$!"
   log "Gateway process started pid=$gateway_pid"
 }
 
 gateway_ok() {
-  # Use unauthenticated root probe; canvas may require auth and cause false negatives.
   curl -fsS "http://127.0.0.1:${GATEWAY_PORT}/" >/dev/null 2>&1
 }
 
 start_gateway
 
+# Disable trace to avoid flooding logs (watchdog runs every 2–10s)
+set +x
 while true; do
   now="$(date +%s)"
   age="$(( now - gateway_started_at ))"
 
-  # Give the gateway time to boot before health enforcement.
   if [ "$age" -lt "$GATEWAY_START_GRACE_SECONDS" ]; then
     sleep 2
     continue
@@ -328,6 +327,7 @@ while true; do
     continue
   fi
 
+  set -x
   log "Gateway health check failed; restarting..."
   if [ -n "${gateway_pid:-}" ]; then
     kill "$gateway_pid" >/dev/null 2>&1 || true
@@ -335,5 +335,6 @@ while true; do
     kill -9 "$gateway_pid" >/dev/null 2>&1 || true
   fi
   start_gateway
+  set +x
   sleep "$GATEWAY_RESTART_BACKOFF_SECONDS"
 done
