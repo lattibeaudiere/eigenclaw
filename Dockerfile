@@ -23,17 +23,15 @@ WORKDIR /app
 
 # ── System deps ───────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip curl ca-certificates ffmpeg \
+    python3 python3-pip curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # ── OpenClaw + long (WhatsApp peer dep) ──────────────────────────────────────
 RUN npm install -g openclaw@2026.3.2 long@latest
 
 # ── Python skill dependencies ─────────────────────────────────────────────────
-# Install CPU-only torch first (--index-url forces CPU wheels, ~200MB vs ~2GB CUDA).
-# Then install the rest; faster-whisper will use the existing torch.
-RUN pip3 install --no-cache-dir --break-system-packages \
-    torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+# Trimmed: faster-whisper, torch, ffmpeg removed to fit EigenCloud 600s build limit.
+# Voice STT disabled; use cloud STT or add back in a pre-built image.
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 

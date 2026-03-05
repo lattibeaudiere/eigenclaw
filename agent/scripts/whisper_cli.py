@@ -5,6 +5,9 @@ Lightweight local Whisper-compatible CLI wrapper for OpenClaw STT.
 Supports a subset of the common `whisper` CLI invocation pattern:
   whisper <audio_path> [--model base] [--language en]
 Unknown flags are ignored so OpenClaw can pass extra args safely.
+
+Note: faster-whisper + ffmpeg are optional (removed for EigenCloud 600s build).
+If not installed, exits with a message; use cloud STT for voice input.
 """
 
 from __future__ import annotations
@@ -13,7 +16,10 @@ import os
 import sys
 from pathlib import Path
 
-from faster_whisper import WhisperModel
+try:
+    from faster_whisper import WhisperModel
+except ImportError:
+    WhisperModel = None  # type: ignore[misc, assignment]
 
 
 def _arg_value(flag: str, args: list[str]) -> str | None:
@@ -32,6 +38,10 @@ def _audio_path(args: list[str]) -> str | None:
 
 
 def main() -> int:
+    if WhisperModel is None:
+        print("Whisper not installed (faster-whisper removed for build size). Use cloud STT for voice.", file=sys.stderr)
+        return 1
+
     args = sys.argv[1:]
     audio = _audio_path(args)
     if not audio:
