@@ -30,8 +30,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN npm install -g openclaw@2026.3.2 long@latest
 
 # ── Python skill dependencies ─────────────────────────────────────────────────
-# requirements.txt installs CPU-only torch first to avoid the ~2GB CUDA download
-# that faster-whisper would otherwise pull in.
+# Install CPU-only torch first (--index-url forces CPU wheels, ~200MB vs ~2GB CUDA).
+# Then install the rest; faster-whisper will use the existing torch.
+RUN pip3 install --no-cache-dir --break-system-packages \
+    torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
